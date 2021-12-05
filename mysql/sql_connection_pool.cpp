@@ -39,19 +39,25 @@ void connection_pool::init(string url, string User, string PassWord, string DBNa
 
 		if (con == NULL)
 		{
+		    printf("mysql_init(con) error\n");
 			LOG_ERROR("MySQL Error");
 			exit(1);
 		}
-		con = mysql_real_connect(con, url.c_str(), User.c_str(), PassWord.c_str(), DBName.c_str(), Port, NULL, 0);
+		// m_Port为string格式--不合适
+		con = mysql_real_connect(con, m_url.c_str(), m_User.c_str(), m_PassWord.c_str(), m_DatabaseName.c_str(), Port, NULL, 0);
 
 		if (con == NULL)
 		{
+            printf("mysql_real_connect error, %s\n", mysql_error(con));
 			LOG_ERROR("MySQL Error");
 			exit(1);
+		} else {
+		    printf("mysql连接成功\n");
 		}
 		connList.push_back(con);
 		++m_FreeConn;
 	}
+	printf("for (int i = 0; i < MaxConn; i++)之后\n");
 
 	reserve = sem(m_FreeConn);
 
