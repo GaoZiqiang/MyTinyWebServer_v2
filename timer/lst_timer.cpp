@@ -1,224 +1,216 @@
 #include "lst_timer.h"
-#include "../http/http_conn.h"
 
-sort_timer_lst::sort_timer_lst()
-{
-    head = NULL;
-    tail = NULL;
+timerList::timerList() {
+    head = nullptr;
+    tail = nullptr;
 }
-sort_timer_lst::~sort_timer_lst()
-{
-    util_timer *tmp = head;
-    while (tmp)
-    {
+
+timerList::~timerList() {
+    // 释放timer链表
+    timerNode* tmp = head;
+    while (tmp) {
         head = tmp->next;
         delete tmp;
         tmp = head;
     }
 }
 
-void sort_timer_lst::add_timer(util_timer *timer)
-{
-    if (!timer)
-    {
+void timerList::add_timer(timerNode *timer) {
+    if (!timer) {
         return;
     }
-    if (!head)
-    {
+    if (!head) {
         head = tail = timer;
         return;
     }
-    if (timer->expire < head->expire)
-    {
+    // 直接插到head之前
+    if (timer->expire < head->expire) {
         timer->next = head;
         head->prev = timer;
         head = timer;
         return;
     }
+    // 插入排序，找到head之后第一个比timer->expire大的节点
     add_timer(timer, head);
 }
-void sort_timer_lst::adjust_timer(util_timer *timer)
-{
+
+// 插入排序，找到head之后第一个比timer->expire大的节点
+void timerList::add_timer(timerNode *timer, timerNode *last_timer) {
+    timerNode* tmp_prev = last_timer;
+    timerNode* tmp = last_timer->next;
+    while (tmp) {
+        // 找到第一个比timer->expire大的节点
+        if (timer->expire < tmp->expire) {
+            tmp_prev->next = timer;
+            timer->next = tmp;
+            tmp->prev = timer;
+            timer->prev = tmp_prev;
+            break;
+        }
+        tmp_prev = tmp;
+        tmp = tmp->next;
+    }
+
+    // 遍历完整个链表仍然没有找到满足tmp->expire > timer->expire的节点--将timer插入到链表尾
+    if (!tmp) {
+        tmp_prev->next = timer;
+        timer->prev = tmp_prev;
+        timer->next = nullptr;
+        tail = timer;
+    }
+}
+
+// 某个定时器任务发生变化时，调整该定时器的expire，然后将该timer_node向链表尾部移动
+void timerList::add_timer(timerNode *timer) {
     if (!timer)
-    {
         return;
-    }
-    util_timer *tmp = timer->next;
-    if (!tmp || (timer->expire < tmp->expire))
-    {
+
+    timerNode* tmp = timer->next;
+    // 若timer位于链表尾部或经增大后的timer->expire仍然小于timer->next->expire--则不调整，仍留在原位置
+    if (!tmp || timer->expire < tmp->expire)
         return;
-    }
-    if (timer == head)
-    {
+
+    // 若timer为头结点，则将该timer从链表中取出，从并重新插入链表
+    if (timer == head) {
         head = head->next;
-        head->prev = NULL;
-        timer->next = NULL;
+        head->prev = nullptr;
+        timer->next = nullptr;
+        // 重新使用add_timer()将timer插入到链表合适的位置
         add_timer(timer, head);
     }
-    else
-    {
+    // 若timer不是头结点，则从原链表中取出，并插入到tmp之后的节点
+    else {
         timer->prev->next = timer->next;
         timer->next->prev = timer->prev;
         add_timer(timer, timer->next);
     }
 }
-void sort_timer_lst::del_timer(util_timer *timer)
-{
+
+// 将定时器timer从链表中删除
+void timerList::del_timer(timerNode *timer) {
     if (!timer)
-    {
         return;
-    }
-    if ((timer == head) && (timer == tail))
-    {
+
+    // 链表中只有一个定时器timer
+    if (timer == head && timer == tail) {
         delete timer;
-        head = NULL;
-        tail = NULL;
+        timer = nullptr;
+        head = nullptrl;
+        tail = nullptr;
         return;
     }
-    if (timer == head)
-    {
+
+    // timer为链表头结点
+    if (timer == head) {
         head = head->next;
-        head->prev = NULL;
+        head->prev = nullptr;
         delete timer;
+        timer = nullptr;
         return;
     }
-    if (timer == tail)
-    {
-        tail = tail->prev;
-        tail->next = NULL;
+
+    // timer为尾节点
+    if (timer == tail) {
+        tail = timer->prev;
+        tail->next = nullptr;
         delete timer;
+        timer = nullptr;
         return;
     }
+
     timer->prev->next = timer->next;
     timer->next->prev = timer->prev;
     delete timer;
+    timer = nullptr;
+
+    return;
 }
-void sort_timer_lst::tick()
-{
-    if (!head)
-    {
+
+// 脉搏函数--每次收到SIGALRM信号便触发一次
+// 1 链表中没有timer
+// 2 链表中有timer--查看是否有超时timer--删除之--并触发SIGALRM信号处理函数
+void timerList::tick(int epollfd) {
+    // 链表为空，当前没有客户连接
+    if (!head) {
+//        LOG_INFO("%s", "no client in connection now");
         return;
     }
-    
-    time_t cur = time(NULL);
-    util_timer *tmp = head;
-    while (tmp)
-    {
-        if (cur < tmp->expire)
-        {
+//    LOG_INFO("%s", "timer tick");
+
+    time_t cur_time = time(nullptr);// 获取系统当前时间
+    timerNode* tmp = head;
+    // 从头结点开始依次遍历每个timer，直到找到一个超时的timer--cur_timer > timer->expire--实际只看表头结点即可
+    while (tmp) {
+        // 未超时--其后的节点都不会超时
+        if (cur_time < tmp->expire)
             break;
-        }
-        tmp->cb_func(tmp->user_data);
+        // 超时--执行SIGALRM信号处理函数--关闭sockfd，并从epollfd例程空间中删除该sockfd
+        tmp->cb_func(tmp->user_data, epollfd);
+        // 执行完任务后，经其从timer_list中删除
         head = tmp->next;
         if (head)
-        {
-            head->prev = NULL;
-        }
+            head->prev = nullptr;
+
         delete tmp;
-        tmp = head;
+        tmp = head;// 继续遍历下一个
     }
 }
 
-void sort_timer_lst::add_timer(util_timer *timer, util_timer *lst_head)
-{
-    util_timer *prev = lst_head;
-    util_timer *tmp = prev->next;
-    while (tmp)
-    {
-        if (timer->expire < tmp->expire)
-        {
-            prev->next = timer;
-            timer->next = tmp;
-            tmp->prev = timer;
-            timer->prev = prev;
-            break;
-        }
-        prev = tmp;
-        tmp = tmp->next;
-    }
-    if (!tmp)
-    {
-        prev->next = timer;
-        timer->prev = prev;
-        timer->next = NULL;
-        tail = timer;
-    }
-}
 
-void Utils::init(int timeslot)
-{
+void signalUtils::init(int timeslot) {
     m_TIMESLOT = timeslot;
 }
 
-//对文件描述符设置非阻塞
-int Utils::setnonblocking(int fd)
-{
+// 对文件描述符设置非阻塞
+int signalUtils::set_non_blocking(int fd) {
     int old_option = fcntl(fd, F_GETFL);
     int new_option = old_option | O_NONBLOCK;
-    fcntl(fd, F_SETFL, new_option);
-    return old_option;
+    int ret = fcntl(fd, F_SETFL, new_option);
+    assert(ret != -1);
+    return 0;
 }
 
-//将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-void Utils::addfd(int epollfd, int fd, bool one_shot, int TRIGMode)
-{
+void signalUtils::add_fd(int epollfd, int sockfd) {
     epoll_event event;
-    event.data.fd = fd;
-
-    if (1 == TRIGMode)
-        event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-    else
-        event.events = EPOLLIN | EPOLLRDHUP;
-
-    if (one_shot)
-        event.events |= EPOLLONESHOT;
-    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
-    setnonblocking(fd);
+    event.data.fd = sockfd;
+    // epoll event的触发模式暂时不区分
+    event.events = EPOLLIN | EPOLLET;// 边缘触发
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &event);
+    set_non_blocking(sockfd);
 }
 
-//信号处理函数
-void Utils::sig_handler(int sig)
-{
-    //为保证函数的可重入性，保留原来的errno
-    int save_errno = errno;
+// 信号处理函数--将alarm信号通过管道发送给epoll内核空间
+void signalUtils::sig_handler(int sig) {
+    int old_errno = errno;
     int msg = sig;
-    send(u_pipefd[1], (char *)&msg, 1, 0);
-    errno = save_errno;
+    send(u_pipefd[1], (char*)&msg, 1, 0);// 将alarm信号通过管道发送给epoll内核空间
+    errno = old_errno;
 }
 
-//设置信号函数
-void Utils::addsig(int sig, void(handler)(int), bool restart)
-{
+// 设置信号函数
+void signalUtils::add_sig(int sig, void (*handler)(int), bool restart) {
     struct sigaction sa;
     memset(&sa, '\0', sizeof(sa));
     sa.sa_handler = handler;
     if (restart)
         sa.sa_flags |= SA_RESTART;
     sigfillset(&sa.sa_mask);
-    assert(sigaction(sig, &sa, NULL) != -1);
+    int ret = sigaction(sig, &sa, nullptr);
+    assert(ret != -1);
 }
 
-//定时处理任务，重新定时以不断触发SIGALRM信号
-void Utils::timer_handler()
-{
+// 定时处理任务
+void signalUtils::timer_handler() {
     m_timer_lst.tick();
-    alarm(m_TIMESLOT);
+    alarm(m_TIMESLOT);// 重启定时器
 }
 
-void Utils::show_error(int connfd, const char *info)
-{
-    send(connfd, info, strlen(info), 0);
-    close(connfd);
-}
-
-int *Utils::u_pipefd = 0;
-int Utils::u_epollfd = 0;
-
-class Utils;
-void cb_func(client_data *user_data)
-{
-    epoll_ctl(Utils::u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
+void signalUtils::cb_func(client_data *user_data) {
+    // 将sockfd从epoll内核空间中移除
+    epoll_ctl(u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
     assert(user_data);
     close(user_data->sockfd);
-    http_conn::m_user_count--;
+    // http连接池中user count --
+//    http_conn::m_user_count--;
+//    LOG_INFO("%s", "close a client");
 }
