@@ -1,36 +1,23 @@
 #include "config.h"
 
 config::config(){
-    cout << "this is config::config()" << endl;
-//    //端口号,9006
-//    PORT = 9006;
-//
-//    //日志写入方式，默认同步
-//    LOGWrite = 0;
-//
-//    //触发组合模式,默认listenfd LT + connfd LT
-//    TRIGMode = 0;
-//
-//    //listenfd触发模式，默认LT
-//    LISTENTrigmode = 0;
-//
-//    //connfd触发模式，默认LT
-//    CONNTrigmode = 0;
-//
-//    //优雅关闭链接，默认不使用
-//    OPT_LINGER = 0;
-//
-//    //数据库连接池数量,默认8
-//    sql_num = 8;
-//
-//    //线程池内的线程数量,默认8
-//    thread_num = 8;
-//
-//    //关闭日志,默认不关闭
-//    close_log = 0;
-//
-//    //并发模型,默认是proactor
-//    actor_model = 0;
+    port = 9999;// socket访问端口
+    log_write = 0;// 日志写入方式，默认同步
+    trig_mode = 0;// 触发组合模式,默认listenfd LT + connfd LT
+    close_log = 0;// 关闭日志，默认不关闭
+
+    db_user = "root";
+    db_passwd = "";
+    db_name = "tinywebserver";
+    sql_num = 8;// 数据库连接池数量,默认8
+
+    thread_num = 8;// 线程池内的线程数量,默认8
+
+    listen_trig_mode = 0;// listenfd触发模式，默认LT
+    conn_trig_mode = 0;// connfd触发模式，默认LT
+
+    opt_linger = 0;// 优雅关闭链接，默认不使用
+    actor_mode = 0;// 并发模型,默认是proactor--改
 }
 
 void config::parse_arg(int argc, char*argv[]){
