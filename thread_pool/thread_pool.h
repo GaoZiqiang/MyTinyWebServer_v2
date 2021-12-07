@@ -5,6 +5,9 @@
 #include <semaphore.h>
 #include <list>
 #include <stdio.h>
+#include "../webserver.h"
+#include "../http/http_conn.h"
+#include "../mysql/sql_connection_pool.h"
 
 const int WORKER_THREAD_NUM = 3;
 
@@ -12,6 +15,7 @@ class threadPool {
 public:
     threadPool();
     ~threadPool() {};
+    static connection_pool* m_conn_pool;// mysql数据库
 
     static void thread_init(bool stop);
     static void thread_destroy();
@@ -31,7 +35,8 @@ public:
     static pthread_cond_t accept_cond;// 条件信号量
     static pthread_cond_t client_cond;
 
-    static std::list<int> client_list;// client列表
+//    static std::list<int> client_list;// client列表
+    static std::list<http_conn*> client_list;
 
 };
 #endif
