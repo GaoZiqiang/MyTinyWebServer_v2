@@ -40,25 +40,28 @@ public:
     void timer(int connfd, struct sockaddr_in client_address);
     void adjust_timer(timerNode* timer);
     bool deal_timer(timerNode* timer, int sockfd);
-    bool deal_with_newclient();
+    static bool deal_with_newclient();
     bool deal_with_signal(bool& timeout, bool& stop);
-    void deal_with_read(int sockfd);
+    static void deal_with_read(int sockfd);
     void deal_with_write(int sockfd);
+    void test() {
+        printf("this is a test func in webserver.h\n");
+    }
 
 public:
     // 基础
     int m_port;
-    char *m_root;
+    static char *m_root;
     int m_log_write;
-    int m_close_log;
+    static int m_close_log;
     int m_actor_mode;
 
     // 数据库相关
-    connection_pool *m_connPool;
-    string m_dbuser;         //登陆数据库用户名
-    string m_dbpasswd;     //登陆数据库密码
-    string m_dbname; //使用数据库名
-    int m_sql_num;
+    static connection_pool *m_connPool;
+    static string m_dbuser;         //登陆数据库用户名
+    static string m_dbpasswd;     //登陆数据库密码
+    static string m_dbname; //使用数据库名
+    static int m_sql_num;
 
     // 线程池相关
 //    threadPool *m_thread_pool;
@@ -66,18 +69,18 @@ public:
 
     // epoll_event相关
     epoll_event events[MAX_EVENT_NUMS];
-    int m_epollfd;
-    int m_listenfd;
+    static int m_epollfd;
+    static int m_listenfd;
     int m_OPT_LINGER;
     int m_TRIG_mode;
     int m_LISTEN_TRIG_mode;
-    int m_CONN_TRIG_mode;
-    http_conn *users_http;
+    static int m_CONN_TRIG_mode;
+    static http_conn *users_http;
 
     // 定时器相关
     int m_pipefd[2];// ALARM定时器信号传输管道
-    client_data *users_timer;
-    timerList timer_list;
-    signalUtils signal_utils;
+    static client_data *users_timer;
+    static timerList timer_list;
+    static signalUtils signal_utils;
 };
 #endif
