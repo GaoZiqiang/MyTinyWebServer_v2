@@ -67,7 +67,7 @@ void WebServer::init(int sock_port, string db_user, string db_passwd, string db_
     m_actor_mode = actor_mode;
 }
 
-void WebServer::sql_pool()
+void WebServer::sql_pool_init()
 {
     //初始化数据库连接池
     m_connPool = connection_pool::GetInstance();
@@ -78,21 +78,32 @@ void WebServer::sql_pool()
     users_http->initmysql_result(m_connPool);
 }
 
+void WebServer::thread_pool_init() {
+    threadPool::thread_init();
+}
 
-bool WebServer::deal_with_newclient() {
-    printf("this is WebServer::deal_with_newclient()\n");
+void WebServer::thread_pool_destroy() {
+    threadPool::thread_destroy();
+}
+
+void WebServer::deal_with_newclient() {
+    ::pthread_cond_signal(&threadPool::accept_cond);
+}
+
+void WebServer::add_newclient() {
     struct sockaddr_in clnt_addr;
     socklen_t clnt_addrlen = sizeof(clnt_addr);
     // accept new client
     int clientfd = accept(m_listenfd, (struct sockaddr*)&clnt_addr, &clnt_addrlen);
     if (clientfd < 0) {
 //        LOG_ERROR("new client accept error, errno is %d", errno);
-        return false;
+        return;
     }
-//    if (http_conn::m_user_count >= MAX_FD) {
+    if (http_conn::m_user_count >= MAX_FD) {
 //        LOG_ERROR("%s", "internal server busy");
-//        return false;
-//    }
+        printf("internal server busy\n");
+        return;
+    }
 
 //    LOG_INFO("%s", "new client connected");
     printf("新客户端连接成功\n");
@@ -109,20 +120,17 @@ bool WebServer::deal_with_newclient() {
     time_t cur_time = time(nullptr);
     timer->expire = cur_time + 3 * TIMESLOT;
     timer->user_data = &users_timer[clientfd];
-    timer->cb_func = signalUtils::cb_func;// 放到timerNode的构造函数???
+    timer->cb_func = signalUtils::cb_func;
 
     users_timer[clientfd].timer = timer;// timer
     signal_utils.m_timer_list.add_timer(timer);
-//    printf("timerlist.add_timer成功\n");
     // 4 users_http配置
     users_http[clientfd].init(clientfd, clnt_addr, m_root, m_CONN_TRIG_mode, m_close_log, m_dbuser,
                               m_dbpasswd, m_dbname);
-
-    return true;
+    return;
 }
 
 bool WebServer::deal_with_signal(bool &timeout, bool &stop) {
-//    printf("接收到SIGALRM信号\n");
     int sig;
     char signals[1024];// 收到的信号放到数组中--一个信号一个字节char
     int ret = recv(m_pipefd[0], signals, sizeof(signals), 0);
@@ -150,41 +158,42 @@ bool WebServer::deal_with_signal(bool &timeout, bool &stop) {
             }
         }// for
     }
-//    printf("this is WebServer::deal_with_signal()\n");
-//    alarm(TIMESLOT);
     return true;
 }
 
 void WebServer::deal_with_read(int sockfd) {
-    int clientfd = sockfd;
-//    printf("接收到客户端 %d 的数据\n", clientfd);
-    // 1 将该client的读事件添加到线程池
-    char buf[256];
-    int ret = read(clientfd, buf, 256);
-//    int ret = recv(clientfd, buf, 256, 0);
-    if (ret < 0) {
-        printf("发生读错误\n");
-        return;
-    } else if (ret == 0) {
-        printf("对方已经断开连接\n");
-        return;
-    } else {
-        printf("接收到客户端 %d 的数据: %s", clientfd, buf);
+    // 1 唤醒worker线程
+    ::pthread_mutex_lock(&threadPool::client_mutex);
+    users_http[sockfd].m_state = 0;// read
+    threadPool::client_list.push_back(users_http + sockfd);// 传递sockfd
+    ::pthread_mutex_unlock(&threadPool::client_mutex);
+    ::pthread_cond_signal(&threadPool::client_cond);
+    while (true) {
+        if (1 == users_http[sockfd].improv) {
+            if(1 == users_http[sockfd].timer_flag) {
+                users_http[sockfd].timer_flag = 0;
+            }
+            users_http[sockfd].improv = 0;
+            break;
+        }
     }
+
     // 2 调整timer
-    timerNode* tmp_timer = users_timer[clientfd].timer;
+    timerNode* tmp_timer = users_timer[sockfd].timer;// 此处sockfd为clientfd
     if (tmp_timer) {
         time_t cur_time = time(nullptr);
         tmp_timer->expire = cur_time + 3 * TIMESLOT;
         signal_utils.m_timer_list.adjust_timer(tmp_timer);
     }
-
-//    printf("this is WebServer::deal_with_read()\n");
-    return ;
+    return;
 }
 
 void WebServer::deal_with_write(int sockfd) {
-    printf("this is WebServer::deal_with_write()\n");
+    ::pthread_mutex_lock(&threadPool::client_mutex);
+    users_http[sockfd].m_state = 1;
+    threadPool::client_list.push_back(users_http + sockfd);
+    ::pthread_mutex_unlock(&threadPool::client_mutex);
+    ::pthread_cond_signal(&threadPool::client_cond);
     return ;
 }
 
@@ -226,11 +235,12 @@ void WebServer::event_listen() {
     // 创建epoll内核空间
     epoll_event events[MAX_EVENT_NUMS];
     m_epollfd = epoll_create(5);
+
     assert(m_epollfd != -1);
 
     // 将m_listenfd添加到epoll空间
     signal_utils.add_fd(m_epollfd, m_listenfd);
-    http_conn::m_epollfd = m_epollfd;
+    http_conn::m_epollfd = m_epollfd;// 同步http_conn的epollfd
 
     // 创建ALARM定时器信号传输管道
     ret = socketpair(PF_UNIX, SOCK_STREAM, 0, m_pipefd);
@@ -257,15 +267,6 @@ void WebServer::event_loop() {
     bool timeout = false;
     bool stop = false;
 
-
-//    m_thread_pool = new threadPool();
-//    m_thread_pool->thread_init(stop);
-//    threadPool thread_pool;
-//    thread_pool.thread_init(stop);
-    threadPool::thread_init(false);
-//    printf("threadPool::accept_id = %d\n", threadPool::accept_id);
-    int j = 0;
-
     while (!stop) {
         // epoll_wait
         int ready_num = epoll_wait(m_epollfd, events, MAX_EVENT_NUMS, -1);// 无限等待
@@ -279,12 +280,8 @@ void WebServer::event_loop() {
             int sockfd = events[i].data.fd;// 事件sockfd
             // new client处理
             if (sockfd == m_listenfd) {
-                printf("new client连接\n");
-                ::pthread_cond_signal(&threadPool::accept_cond);
-//                pthread_cond_signal(&threadPool::accept_cond);
-//                bool ret = deal_with_newclient();
-//                if (false == ret)// new client连接失败
-//                    continue;
+                printf("new client %d 连接\n", events[i].data.fd);
+                deal_with_newclient();
             } else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                 // 断开服务器连接，移除timer定时器
                 timerNode* timer = users_timer[sockfd].timer;
@@ -302,24 +299,10 @@ void WebServer::event_loop() {
                 }
             } else if (events[i].events & EPOLLIN) {// read数据处理
                 printf("发生读事件, client %d 发来数据\n", sockfd);
-                ::pthread_mutex_lock(&threadPool::client_mutex);
-//                threadPool::client_list.push_back(sockfd);
-                users_http[sockfd].m_state = 0;// read
-                threadPool::client_list.push_back(users_http + sockfd);// 传递sockfd
-                ::pthread_mutex_unlock(&threadPool::client_mutex);
-                ::pthread_cond_signal(&threadPool::client_cond);
-//                deal_with_read(sockfd);
+                deal_with_read(sockfd);
             } else if (events[i].events & EPOLLOUT) {// write数据处理
                 printf("发生写事件, 发送数据给client %d\n", sockfd);
-                ::pthread_mutex_lock(&threadPool::client_mutex);
-//                threadPool::client_list.push_back(sockfd);
-                users_http->m_state = 1;
-                threadPool::client_list.push_back(users_http + sockfd);
-                ::pthread_mutex_unlock(&threadPool::client_mutex);
-                ::pthread_cond_signal(&threadPool::client_cond);
-
-
-//                deal_with_write(sockfd);
+                deal_with_write(sockfd);
             }
         }// for
         // timeout处理

@@ -31,8 +31,9 @@ public:
               int opt_linger, int trig_mode, int sql_num, int thread_num, int close_log,
               int actor_mode);
 
-    void thread_pool();
-    void sql_pool();
+    void thread_pool_init();
+    void thread_pool_destroy();
+    void sql_pool_init();
     void log_write();
     void trig_mode();
     void event_listen();
@@ -40,7 +41,9 @@ public:
     void timer(int connfd, struct sockaddr_in client_address);
     void adjust_timer(timerNode* timer);
     bool deal_timer(timerNode* timer, int sockfd);
-    static bool deal_with_newclient();
+
+    void deal_with_newclient();
+    static void add_newclient();
     bool deal_with_signal(bool& timeout, bool& stop);
     static void deal_with_read(int sockfd);
     void deal_with_write(int sockfd);
