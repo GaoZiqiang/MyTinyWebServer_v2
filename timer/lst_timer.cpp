@@ -61,7 +61,7 @@ void timerList::add_timer(timerNode *timer, timerNode *last_timer) {
 }
 
 // 某个定时器任务发生变化时，调整该定时器的expire，然后将该timer_node向链表尾部移动
-void timerList::add_timer(timerNode *timer) {
+void timerList::adjust_timer(timerNode *timer) {
     if (!timer)
         return;
 
@@ -95,7 +95,7 @@ void timerList::del_timer(timerNode *timer) {
     if (timer == head && timer == tail) {
         delete timer;
         timer = nullptr;
-        head = nullptrl;
+        head = nullptr;
         tail = nullptr;
         return;
     }
@@ -129,14 +129,15 @@ void timerList::del_timer(timerNode *timer) {
 // 脉搏函数--每次收到SIGALRM信号便触发一次
 // 1 链表中没有timer
 // 2 链表中有timer--查看是否有超时timer--删除之--并触发SIGALRM信号处理函数
-void timerList::tick(int epollfd) {
-    // 链表为空，当前没有客户连接
-    if (!head) {
+void timerList::tick() {
+    // 链表为空，当前没有客户端连接
+    if (nullptr == head) {
+        printf("链表为空，当前没有客户端连接\n");
 //        LOG_INFO("%s", "no client in connection now");
         return;
     }
 //    LOG_INFO("%s", "timer tick");
-
+    printf("timer tick\n");
     time_t cur_time = time(nullptr);// 获取系统当前时间
     timerNode* tmp = head;
     // 从头结点开始依次遍历每个timer，直到找到一个超时的timer--cur_timer > timer->expire--实际只看表头结点即可
@@ -145,17 +146,20 @@ void timerList::tick(int epollfd) {
         if (cur_time < tmp->expire)
             break;
         // 超时--执行SIGALRM信号处理函数--关闭sockfd，并从epollfd例程空间中删除该sockfd
-        tmp->cb_func(tmp->user_data, epollfd);
+        tmp->cb_func(tmp->user_data);
         // 执行完任务后，经其从timer_list中删除
         head = tmp->next;
         if (head)
             head->prev = nullptr;
-
         delete tmp;
+        printf("剔除一个timer\n");
         tmp = head;// 继续遍历下一个
     }
 }
 
+// 先声明一下？
+int signalUtils::u_epollfd = 0;
+int *signalUtils::u_pipefd = 0;
 
 void signalUtils::init(int timeslot) {
     m_TIMESLOT = timeslot;
@@ -174,7 +178,7 @@ void signalUtils::add_fd(int epollfd, int sockfd) {
     epoll_event event;
     event.data.fd = sockfd;
     // epoll event的触发模式暂时不区分
-    event.events = EPOLLIN | EPOLLET;// 边缘触发
+    event.events = EPOLLIN | EPOLLRDHUP;// trigmode = 0
     epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &event);
     set_non_blocking(sockfd);
 }
@@ -183,7 +187,7 @@ void signalUtils::add_fd(int epollfd, int sockfd) {
 void signalUtils::sig_handler(int sig) {
     int old_errno = errno;
     int msg = sig;
-    send(u_pipefd[1], (char*)&msg, 1, 0);// 将alarm信号通过管道发送给epoll内核空间
+    send(signalUtils::u_pipefd[1], (char*)&msg, 1, 0);// 将alarm信号通过管道发送给epoll内核空间
     errno = old_errno;
 }
 
@@ -201,8 +205,11 @@ void signalUtils::add_sig(int sig, void (*handler)(int), bool restart) {
 
 // 定时处理任务
 void signalUtils::timer_handler() {
-    m_timer_lst.tick();
+//    printf("in signalUtils::timer_handler()\n");
+    m_timer_list.tick();
+//    printf("after tick()\n");
     alarm(m_TIMESLOT);// 重启定时器
+//    printf("after alarm(m_TIMESLOT)\n");
 }
 
 void signalUtils::cb_func(client_data *user_data) {

@@ -11,8 +11,10 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <errno.h>
-
-
+#include <time.h>
+#include <assert.h>
+#include <string.h>
+#include <stdio.h>
 
 // 前置声明
 class timerNode;
@@ -34,7 +36,7 @@ public:
     // 存储结构内容
     // 1 闹钟本身信息--超时时间、处理函数
     time_t expire;
-    void (*cb_func) (client_data*, int);// 待修改
+    void (*cb_func) (client_data*);// 待修改
     // 2 与闹钟绑定的客户数据
     client_data* user_data;
     // 3 节点前后指针
@@ -51,7 +53,7 @@ public:
     void adjust_timer(timerNode* timer);
     void del_timer(timerNode* timer);
     // 脉搏函数--每次收到SIGALRM信号便触发一次
-    void tick(int epollfd);// 待修改
+    void tick();// 隐藏了epollfd--类成员变量
 
 private:
     // 链表的头指针和尾指针
@@ -64,8 +66,8 @@ private:
 
 class signalUtils {
 public:
-    signalUtils();
-    ~signalUtils();
+    signalUtils() {}
+    ~signalUtils() {}
 
     void init(int timeslot);
 //    static void get_pipefd();
