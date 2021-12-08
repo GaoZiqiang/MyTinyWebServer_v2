@@ -26,7 +26,7 @@ void http_conn::initmysql_result(connection_pool *connPool)
     //在user表中检索username，passwd数据，浏览器端输入
     if (mysql_query(mysql, "SELECT username,passwd FROM user"))
     {
-        LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
+//        LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
     }
 
     //从表中检索完整的结果集
@@ -103,7 +103,7 @@ void http_conn::close_conn(bool real_close)
 {
     if (real_close && (m_sockfd != -1))
     {
-        printf("close %d\n", m_sockfd);
+//        printf("close %d\n", m_sockfd);
         removefd(m_epollfd, m_sockfd);
         m_sockfd = -1;
         m_user_count--;
@@ -204,31 +204,10 @@ bool http_conn::read_once()
     }
     int bytes_read = 0;
 
-//    printf("in http_conn::read_once(), 读取数据\n");
-//    printf("in http_conn::read_once(), sockfd = %d\n", m_sockfd);
-//    char buf[256];
-////    bzero(buf, sizeof(buf));
-//    int ret = read(m_sockfd, buf, 256);
-//    if (ret < 0) {
-//        printf("read error, errno = %d\n", errno);
-//        return false;
-//    }
-//    printf("in http_conn::read_once(), read from client %d: %s\n", m_sockfd, buf);
-
     //LT读取数据
     if (0 == m_TRIGMode)
     {
-//        printf("in http_conn::read_once(), LT读取数据\n");
-//        printf("in http_conn::read_once(), sockfd = %d\n", m_sockfd);
-//        char buf[256];
-//        bzero(buf, sizeof(buf));
-//        int ret = read(m_sockfd, buf, 256);
-//        if (ret < 0) {
-//            printf("read error, errno = %d\n", errno);
-//            return false;
-//        }
         bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
-        printf("in http_conn::read_once(), read from client %d: %s", m_sockfd, m_read_buf);
         m_read_idx += bytes_read;
 
         if (bytes_read <= 0)
@@ -243,16 +222,6 @@ bool http_conn::read_once()
     {
         while (true)
         {
-//            printf("in http_conn::read_once(), ET读取数据\n");
-//            printf("in http_conn::read_once(), sockfd = %d\n", m_sockfd);
-//            char buf[256];
-//            bzero(buf, sizeof(buf));
-//            int ret = read(m_sockfd, buf, 256);
-//            if (ret < 0) {
-//                printf("read error, errno = %d\n", errno);
-//                return false;
-//            }
-
             bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
             if (bytes_read == -1)
             {
@@ -353,7 +322,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text)
     }
     else
     {
-        LOG_INFO("oop!unknow header: %s", text);
+//        LOG_INFO("oop!unknow header: %s", text);
     }
     return NO_REQUEST;
 }
@@ -373,7 +342,6 @@ http_conn::HTTP_CODE http_conn::parse_content(char *text)
 
 http_conn::HTTP_CODE http_conn::process_read()
 {
-    printf("in http_conn::process_read()\n");
     LINE_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;
     char *text = 0;
@@ -382,7 +350,7 @@ http_conn::HTTP_CODE http_conn::process_read()
     {
         text = get_line();
         m_start_line = m_checked_idx;
-        LOG_INFO("%s", text);
+//        LOG_INFO("%s", text);
         switch (m_check_state)
         {
             case CHECK_STATE_REQUESTLINE:
@@ -422,7 +390,6 @@ http_conn::HTTP_CODE http_conn::do_request()
 {
     strcpy(m_real_file, doc_root);
     int len = strlen(doc_root);
-    //printf("m_url:%s\n", m_url);
     const char *p = strrchr(m_url, '/');
 
     //处理cgi
@@ -626,7 +593,7 @@ bool http_conn::add_response(const char *format, ...)
     m_write_idx += len;
     va_end(arg_list);
 
-    LOG_INFO("request:%s", m_write_buf);
+//    LOG_INFO("request:%s", m_write_buf);
 
     return true;
 }
@@ -724,11 +691,9 @@ void http_conn::process()
     if (read_ret == NO_REQUEST)
     {
         modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
-        printf("in http_conn, read_ret == NO_REQUEST, return\n");
         return;
     }
     bool write_ret = process_write(read_ret);
-    printf("in http_conn, after process_write\n");
     if (!write_ret)
     {
         close_conn();
