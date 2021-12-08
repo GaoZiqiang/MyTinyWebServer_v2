@@ -24,6 +24,7 @@ APP_OBJ = ${APP_OBJ_DIR}/main.o \
  	${APP_OBJ_DIR}/http_conn.o \
  	${APP_OBJ_DIR}/lst_timer.o \
  	${APP_OBJ_DIR}/log.o \
+ 	${APP_OBJ_DIR}/thread_pool.o \
 
 
 
@@ -53,6 +54,9 @@ ${APP_OBJ_DIR}/%.o:utils/%.cpp
 	${CCC} -c ${CFLAGS}  ${INC_DIR} -o $@ $<
 
 ${APP_OBJ_DIR}/%.o:timer/%.cpp
+	${CCC} -c ${CFLAGS}  ${INC_DIR} -o $@ $<
+
+${APP_OBJ_DIR}/%.o:thread_pool/%.cpp
 	${CCC} -c ${CFLAGS}  ${INC_DIR} -o $@ $<
 
 clean:
