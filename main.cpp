@@ -18,5 +18,5 @@ int main(int argc, char* argv[]) {
     printf("server.thread_pool_init之后\n");
     server.event_listen();
     server.event_loop();
-    server.thread_pool_destroy();
+//    server.thread_pool_destroy();
 }

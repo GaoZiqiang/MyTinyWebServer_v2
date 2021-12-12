@@ -21,12 +21,13 @@ public:
     int GetFreeConn();					 //获取连接
     void DestroyPool();					 //销毁所有连接
 
-    //单例模式
+    //单例模式 用户通过接口获取实例：使用 static 类成员函数
     static connection_pool *GetInstance();
 
     void init(string url, string User, string PassWord, string DataBaseName, int Port, int MaxConn, int close_log);
 
 private:
+    // 单例模式：构造函数声明为private，防止用户自声明并定义实例
     connection_pool();
     ~connection_pool();
 

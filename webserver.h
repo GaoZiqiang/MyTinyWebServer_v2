@@ -20,6 +20,7 @@ const int TIMESLOT = 5;// 超时时间
 using namespace std;
 
 class config;
+class threadPool;
 
 class WebServer {
 public:
@@ -32,7 +33,7 @@ public:
               int actor_mode);
 
     void thread_pool_init();
-    void thread_pool_destroy();
+//    void thread_pool_destroy();
     void sql_pool_init();
     void log_write();
     void trig_mode();
@@ -45,7 +46,7 @@ public:
     void deal_with_newclient();
     static void add_newclient();
     bool deal_with_signal(bool& timeout, bool& stop);
-    static void deal_with_read(int sockfd);
+    void deal_with_read(int sockfd);
     void deal_with_write(int sockfd);
     void test() {
         printf("this is a test func in webserver.h\n");
@@ -54,36 +55,39 @@ public:
 public:
     // 基础
     int m_port;
-    static char *m_root;
+    char *m_root;
     int m_log_write;
-    static int m_close_log;
+    int m_close_log;
     int m_actor_mode;
 
     // 数据库相关
     static connection_pool *m_connPool;
-    static string m_dbuser;         //登陆数据库用户名
-    static string m_dbpasswd;     //登陆数据库密码
-    static string m_dbname; //使用数据库名
-    static int m_sql_num;
+    string m_dbuser;         //登陆数据库用户名
+    string m_dbpasswd;     //登陆数据库密码
+    string m_dbname; //使用数据库名
+    int m_sql_num;
 
     // 线程池相关
+    threadPool* m_thread_pool;
 //    threadPool *m_thread_pool;
     int m_thread_num;
 
     // epoll_event相关
     epoll_event events[MAX_EVENT_NUMS];
-    static int m_epollfd;
+    int m_epollfd;
     static int m_listenfd;
+    static int clientfd;
+    static struct sockaddr_in clnt_addr;
     int m_OPT_LINGER;
     int m_TRIG_mode;
     int m_LISTEN_TRIG_mode;
-    static int m_CONN_TRIG_mode;
-    static http_conn *users_http;
+    int m_CONN_TRIG_mode;
+    http_conn *users_http;
 
     // 定时器相关
     int m_pipefd[2];// ALARM定时器信号传输管道
-    static client_data *users_timer;
-    static timerList timer_list;
-    static signalUtils signal_utils;
+    client_data *users_timer;
+    timerList timer_list;
+    signalUtils signal_utils;
 };
 #endif

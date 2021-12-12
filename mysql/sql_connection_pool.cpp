@@ -19,6 +19,8 @@ connection_pool::connection_pool()
 connection_pool *connection_pool::GetInstance()
 {
     static connection_pool connPool;
+    if (nullptr == &connPool)
+        return nullptr;
     return &connPool;
 }
 

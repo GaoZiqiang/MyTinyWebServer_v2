@@ -1,0 +1,3 @@
+/home/gaoziqiang/CLionProjects/MyLinuxNetworkProgramming/MyTinyWebServerOrigin/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/gaoziqiang/CLionProjects/MyLinuxNetworkProgramming/MyTinyWebServerOrigin/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/gaoziqiang/CLionProjects/MyLinuxNetworkProgramming/MyTinyWebServerOrigin/cmake-build-debug/CMakeFiles/MyTinyWebServer.dir

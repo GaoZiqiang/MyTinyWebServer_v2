@@ -3,22 +3,24 @@
 
 //int signalUtils::u_epollfd = 0;
 //int *signalUtils::u_pipefd = 0;
+int WebServer::clientfd;
+sockaddr_in WebServer::clnt_addr;
 
 int WebServer::m_listenfd;
-int WebServer::m_epollfd;
-char* WebServer::m_root;
-int WebServer::m_CONN_TRIG_mode;
-int WebServer::m_close_log;
-string WebServer::m_dbuser;
-string WebServer::m_dbname;
-string WebServer::m_dbpasswd;
-int WebServer::m_sql_num;
+//int WebServer::m_epollfd;
+//char* WebServer::m_root;
+//int WebServer::m_CONN_TRIG_mode;
+//int WebServer::m_close_log;
+//string WebServer::m_dbuser;
+//string WebServer::m_dbname;
+//string WebServer::m_dbpasswd;
+//int WebServer::m_sql_num;
 connection_pool* WebServer::m_connPool;
-
-client_data* WebServer::users_timer;
-timerList WebServer::timer_list;
-signalUtils WebServer::signal_utils;
-http_conn* WebServer::users_http;
+//
+//client_data* WebServer::users_timer;
+//timerList WebServer::timer_list;
+//signalUtils WebServer::signal_utils;
+//http_conn* WebServer::users_http;
 
 WebServer::WebServer() {
     // http_conn类对象
@@ -43,7 +45,8 @@ WebServer::~WebServer() {
     close(m_pipefd[1]);
     delete[] users_http;
     delete[] users_timer;
-//    delete m_thread_pool;
+//    m_thread_pool->thread_destroy();
+    delete m_thread_pool;
 }
 
 void WebServer::init(config* _config) {
@@ -79,34 +82,16 @@ void WebServer::sql_pool_init()
 }
 
 void WebServer::thread_pool_init() {
-    threadPool::thread_init();
+    m_thread_pool = new threadPool();
+//    m_thread_pool->thread_init();
 }
 
-void WebServer::thread_pool_destroy() {
-    threadPool::thread_destroy();
-}
+//void WebServer::thread_pool_destroy() {
+//    m_thread_pool->thread_destroy();
+//}
 
 void WebServer::deal_with_newclient() {
-    ::pthread_cond_signal(&threadPool::accept_cond);
-}
-
-void WebServer::add_newclient() {
-    struct sockaddr_in clnt_addr;
-    socklen_t clnt_addrlen = sizeof(clnt_addr);
-    // accept new client
-    int clientfd = accept(m_listenfd, (struct sockaddr*)&clnt_addr, &clnt_addrlen);
-    if (clientfd < 0) {
-//        LOG_ERROR("new client accept error, errno is %d", errno);
-        return;
-    }
-    if (http_conn::m_user_count >= MAX_FD) {
-//        LOG_ERROR("%s", "internal server busy");
-        printf("internal server busy\n");
-        return;
-    }
-
-//    LOG_INFO("%s", "new client connected");
-    printf("新客户端连接成功\n");
+    ::pthread_cond_signal(&accept_cond);
 
     // 1 将clientfd添加到epoll内核空间
     signal_utils.add_fd(m_epollfd, clientfd);
@@ -127,6 +112,26 @@ void WebServer::add_newclient() {
     // 4 users_http配置
     users_http[clientfd].init(clientfd, clnt_addr, m_root, m_CONN_TRIG_mode, m_close_log, m_dbuser,
                               m_dbpasswd, m_dbname);
+}
+
+void WebServer::add_newclient() {
+//    struct sockaddr_in clnt_addr;
+    socklen_t clnt_addrlen = sizeof(clnt_addr);
+    // accept new client
+    clientfd = accept(m_listenfd, (struct sockaddr*)&clnt_addr, &clnt_addrlen);
+    if (clientfd < 0) {
+//        LOG_ERROR("new client accept error, errno is %d", errno);
+        return;
+    }
+    if (http_conn::m_user_count >= MAX_FD) {
+//        LOG_ERROR("%s", "internal server busy");
+        printf("internal server busy\n");
+        return;
+    }
+
+//    LOG_INFO("%s", "new client connected");
+    printf("新客户端连接成功\n");
+
     return;
 }
 
@@ -163,11 +168,11 @@ bool WebServer::deal_with_signal(bool &timeout, bool &stop) {
 
 void WebServer::deal_with_read(int sockfd) {
     // 1 唤醒worker线程
-    ::pthread_mutex_lock(&threadPool::client_mutex);
+    ::pthread_mutex_lock(&client_mutex);
     users_http[sockfd].m_state = 0;// read
-    threadPool::client_list.push_back(users_http + sockfd);// 传递sockfd
-    ::pthread_mutex_unlock(&threadPool::client_mutex);
-    ::pthread_cond_signal(&threadPool::client_cond);
+    client_list.push_back(users_http + sockfd);// 传递sockfd
+    ::pthread_mutex_unlock(&client_mutex);
+    ::pthread_cond_signal(&client_cond);
     while (true) {
         if (1 == users_http[sockfd].improv) {
             if(1 == users_http[sockfd].timer_flag) {
@@ -189,11 +194,11 @@ void WebServer::deal_with_read(int sockfd) {
 }
 
 void WebServer::deal_with_write(int sockfd) {
-    ::pthread_mutex_lock(&threadPool::client_mutex);
+    ::pthread_mutex_lock(&client_mutex);
     users_http[sockfd].m_state = 1;
-    threadPool::client_list.push_back(users_http + sockfd);
-    ::pthread_mutex_unlock(&threadPool::client_mutex);
-    ::pthread_cond_signal(&threadPool::client_cond);
+    client_list.push_back(users_http + sockfd);
+    ::pthread_mutex_unlock(&client_mutex);
+    ::pthread_cond_signal(&client_cond);
     return ;
 }
 
